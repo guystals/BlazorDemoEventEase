@@ -1,0 +1,67 @@
+﻿@inherits LayoutComponentBase
+@using EventEase.Services
+@using EventEase.Components
+@inject UserSessionService SessionService
+@inject BrowserStorageService StorageService
+@inject NavigationManager Navigation
+@implements IDisposable
+
+<div class="page">
+    <div class="sidebar">
+        <NavMenu />
+    </div>
+
+    <main>
+@*         <div class="top-row px-4">
+            <SessionInfo />
+            <a href="https://learn.microsoft.com/aspnet/core/" target="_blank">About</a>
+        </div> *@
+
+        <article class="content px-4">
+            @Body
+        </article>
+    </main>
+</div>
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        // Initialize session from browser storage
+        await SessionService.InitializeSessionAsync(
+            StorageService.GetFromLocalStorageAsync,
+            StorageService.SetInLocalStorageAsync);
+
+        // Track initial page
+        TrackCurrentPage();
+
+        // Subscribe to navigation changes
+        Navigation.LocationChanged += OnLocationChanged;
+    }
+
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        TrackCurrentPage();
+        _ = SaveSessionAsync();
+    }
+
+    private void TrackCurrentPage()
+    {
+        var uri = new Uri(Navigation.Uri);
+        var pageName = string.IsNullOrEmpty(uri.LocalPath) || uri.LocalPath == "/" 
+            ? "Home" 
+            : uri.LocalPath.TrimStart('/');
+
+        SessionService.TrackPageView(pageName);
+    }
+
+    private async Task SaveSessionAsync()
+    {
+        await SessionService.SaveSessionAsync(StorageService.SetInLocalStorageAsync);
+    }
+
+    public void Dispose()
+    {
+        Navigation.LocationChanged -= OnLocationChanged;
+        _ = SaveSessionAsync();
+    }
+}

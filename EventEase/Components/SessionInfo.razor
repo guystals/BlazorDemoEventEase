@@ -1,0 +1,108 @@
+@using EventEase.Services
+@inject UserSessionService SessionService
+@implements IAsyncDisposable
+
+<div class="session-info">
+    <div class="session-stats">
+        <span class="session-stat">
+            <i class="bi bi-clock"></i>
+            <small>Session: @FormatDuration(stats.SessionDuration)</small>
+        </span>
+        <span class="session-stat">
+            <i class="bi bi-eye"></i>
+            <small>@stats.UniqueEventsViewed events viewed</small>
+        </span>
+        <span class="session-stat">
+            <i class="bi bi-check-circle"></i>
+            <small>@stats.TotalRegistrations registered</small>
+        </span>
+        @if (SessionService.CurrentSession.IsAuthenticated)
+        {
+            <span class="session-stat">
+                <i class="bi bi-person-check"></i>
+                <small>@SessionService.CurrentSession.UserName</small>
+            </span>
+        }
+    </div>
+</div>
+
+@code {
+    private SessionStatistics stats = new();
+    private PeriodicTimer? updateTimer;
+    private CancellationTokenSource? updateCancellation;
+    private Task? updateTask;
+
+    protected override void OnInitialized()
+    {
+        UpdateStats();
+        SessionService.OnSessionChanged += HandleSessionChanged;
+
+        // Update stats every 10 seconds
+        updateCancellation = new CancellationTokenSource();
+        updateTimer = new PeriodicTimer(TimeSpan.FromSeconds(10));
+        updateTask = RefreshStatsAsync(updateCancellation.Token);
+    }
+
+    private void HandleSessionChanged()
+    {
+        UpdateStats();
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void UpdateStats()
+    {
+        stats = SessionService.GetStatistics();
+    }
+
+    private async Task RefreshStatsAsync(CancellationToken cancellationToken)
+    {
+        if (updateTimer == null)
+        {
+            return;
+        }
+
+        try
+        {
+            while (await updateTimer.WaitForNextTickAsync(cancellationToken))
+            {
+                await InvokeAsync(() =>
+                {
+                    UpdateStats();
+                    StateHasChanged();
+                });
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private string FormatDuration(TimeSpan duration)
+    {
+        if (duration.TotalMinutes < 1)
+            return $"{(int)duration.TotalSeconds}s";
+        if (duration.TotalHours < 1)
+            return $"{(int)duration.TotalMinutes}m";
+        return $"{(int)duration.TotalHours}h {duration.Minutes}m";
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        SessionService.OnSessionChanged -= HandleSessionChanged;
+        updateCancellation?.Cancel();
+        updateTimer?.Dispose();
+
+        if (updateTask != null)
+        {
+            try
+            {
+                await updateTask;
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }
+
+        updateCancellation?.Dispose();
+    }
+}

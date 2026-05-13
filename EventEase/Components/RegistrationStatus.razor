@@ -1,0 +1,33 @@
+@using EventEase.Services
+@inject UserSessionService SessionService
+@implements IDisposable
+
+@if (IsRegistered)
+{
+    <div class="alert alert-success d-flex align-items-center gap-2">
+        <i class="bi bi-check-circle-fill"></i>
+        <span>You're already registered for this event!</span>
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public int EventId { get; set; }
+
+    private bool IsRegistered => SessionService.IsRegisteredForEvent(EventId);
+
+    protected override void OnInitialized()
+    {
+        SessionService.OnSessionChanged += HandleSessionChanged;
+    }
+
+    private void HandleSessionChanged()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        SessionService.OnSessionChanged -= HandleSessionChanged;
+    }
+}

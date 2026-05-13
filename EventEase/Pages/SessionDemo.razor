@@ -1,0 +1,362 @@
+@page "/session-demo"
+@using EventEase.Services
+@using EventEase.Models
+@inject UserSessionService SessionService
+@inject BrowserStorageService StorageService
+@implements IAsyncDisposable
+
+<PageTitle>Session Tracker Demo - EventEase</PageTitle>
+
+<div class="container py-4">
+    <div class="row">
+        <div class="col-12">
+            <h1>User Session Tracker Demo</h1>
+            <p class="lead">Real-time session state management for Blazor WebAssembly</p>
+        </div>
+    </div>
+
+    <div class="row mt-4">
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="bi bi-person-badge"></i> Session Information</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm">
+                        <tbody>
+                            <tr>
+                                <th>User ID:</th>
+                                <td><code>@SessionService.CurrentSession.UserId</code></td>
+                            </tr>
+                            <tr>
+                                <th>User Name:</th>
+                                <td>@(SessionService.CurrentSession.UserName ?? "Not set")</td>
+                            </tr>
+                            <tr>
+                                <th>Email:</th>
+                                <td>@(SessionService.CurrentSession.Email ?? "Not set")</td>
+                            </tr>
+                            <tr>
+                                <th>Authenticated:</th>
+                                <td>
+                                    @if (SessionService.CurrentSession.IsAuthenticated)
+                                    {
+                                        <span class="badge bg-success">Yes</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary">No</span>
+                                    }
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>Session Started:</th>
+                                <td>@SessionService.CurrentSession.SessionStartTime.ToLocalTime().ToString("g")</td>
+                            </tr>
+                            <tr>
+                                <th>Last Activity:</th>
+                                <td>@SessionService.CurrentSession.LastActivity.ToLocalTime().ToString("T")</td>
+                            </tr>
+                            <tr>
+                                <th>Current Page:</th>
+                                <td>@(SessionService.CurrentSession.CurrentPage ?? "Unknown")</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0"><i class="bi bi-graph-up"></i> Session Statistics</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm">
+                        <tbody>
+                            <tr>
+                                <th>Session Duration:</th>
+                                <td>@FormatDuration(stats.SessionDuration)</td>
+                            </tr>
+                            <tr>
+                                <th>Idle Time:</th>
+                                <td>@FormatDuration(stats.IdleTime)</td>
+                            </tr>
+                            <tr>
+                                <th>Total Page Views:</th>
+                                <td><span class="badge bg-info">@stats.TotalPageViews</span></td>
+                            </tr>
+                            <tr>
+                                <th>Events Viewed:</th>
+                                <td><span class="badge bg-primary">@stats.UniqueEventsViewed</span></td>
+                            </tr>
+                            <tr>
+                                <th>Registrations:</th>
+                                <td><span class="badge bg-success">@stats.TotalRegistrations</span></td>
+                            </tr>
+                            <tr>
+                                <th>Status:</th>
+                                <td>
+                                    @if (stats.IsActive)
+                                    {
+                                        <span class="badge bg-success">Active</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-warning">Idle</span>
+                                    }
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0"><i class="bi bi-eye"></i> Viewed Events</h5>
+                </div>
+                <div class="card-body">
+                    @if (SessionService.CurrentSession.ViewedEventIds.Any())
+                    {
+                        <div class="d-flex flex-wrap gap-2">
+                            @foreach (var eventId in SessionService.CurrentSession.ViewedEventIds)
+                            {
+                                <span class="badge bg-info">Event #@eventId</span>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <p class="text-muted">No events viewed yet. Visit the <a href="/events">Events page</a> to explore.</p>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0"><i class="bi bi-check-circle"></i> Registered Events</h5>
+                </div>
+                <div class="card-body">
+                    @if (SessionService.CurrentSession.RegisteredEventIds.Any())
+                    {
+                        <div class="d-flex flex-wrap gap-2">
+                            @foreach (var eventId in SessionService.CurrentSession.RegisteredEventIds)
+                            {
+                                <span class="badge bg-success">Event #@eventId</span>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <p class="text-muted">No registrations yet. Register for events to see them here.</p>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <div class="card mb-4">
+                <div class="card-header bg-warning">
+                    <h5 class="mb-0"><i class="bi bi-sliders"></i> User Preferences</h5>
+                </div>
+                <div class="card-body">
+                    @if (SessionService.CurrentSession.Preferences.Any())
+                    {
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Key</th>
+                                    <th>Value</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var pref in SessionService.CurrentSession.Preferences)
+                                {
+                                    <tr>
+                                        <td><code>@pref.Key</code></td>
+                                        <td>@pref.Value</td>
+                                        <td>
+                                            <button class="btn btn-sm btn-danger" @onclick="() => RemovePreference(pref.Key)">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                    else
+                    {
+                        <p class="text-muted">No preferences set.</p>
+                    }
+
+                    <div class="row mt-3">
+                        <div class="col-md-5">
+                            <input type="text" class="form-control" placeholder="Preference key" @bind="newPrefKey" />
+                        </div>
+                        <div class="col-md-5">
+                            <input type="text" class="form-control" placeholder="Preference value" @bind="newPrefValue" />
+                        </div>
+                        <div class="col-md-2">
+                            <button class="btn btn-primary w-100" @onclick="AddPreference">Add</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <div class="card mb-4">
+                <div class="card-header bg-dark text-white">
+                    <h5 class="mb-0"><i class="bi bi-tools"></i> Actions</h5>
+                </div>
+                <div class="card-body">
+                    <div class="d-flex gap-2 flex-wrap">
+                        <button class="btn btn-primary" @onclick="() => SessionService.SetAuthentication(true, testUserName, testEmail)">
+                            <i class="bi bi-person-check"></i> Simulate Login
+                        </button>
+                        <button class="btn btn-secondary" @onclick="() => SessionService.SetAuthentication(false)">
+                            <i class="bi bi-person-x"></i> Simulate Logout
+                        </button>
+                        <button class="btn btn-info" @onclick="SaveSession">
+                            <i class="bi bi-save"></i> Save Session
+                        </button>
+                        <button class="btn btn-danger" @onclick="ResetSession">
+                            <i class="bi bi-arrow-clockwise"></i> Reset Session
+                        </button>
+                    </div>
+
+                    <div class="mt-3">
+                        <label class="form-label">Test User Name:</label>
+                        <input type="text" class="form-control mb-2" @bind="testUserName" placeholder="John Doe" />
+                        <label class="form-label">Test Email:</label>
+                        <input type="email" class="form-control" @bind="testEmail" placeholder="john@example.com" />
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private SessionStatistics stats = new();
+    private PeriodicTimer? updateTimer;
+    private CancellationTokenSource? updateCancellation;
+    private Task? updateTask;
+    private string newPrefKey = string.Empty;
+    private string newPrefValue = string.Empty;
+    private string testUserName = "John Doe";
+    private string testEmail = "john.doe@example.com";
+
+    protected override void OnInitialized()
+    {
+        UpdateStats();
+        SessionService.OnSessionChanged += HandleSessionChanged;
+
+        // Update every 2 seconds for demo purposes
+        updateCancellation = new CancellationTokenSource();
+        updateTimer = new PeriodicTimer(TimeSpan.FromSeconds(2));
+        updateTask = RefreshStatsAsync(updateCancellation.Token);
+    }
+
+    private void HandleSessionChanged()
+    {
+        UpdateStats();
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void UpdateStats()
+    {
+        stats = SessionService.GetStatistics();
+    }
+
+    private async Task RefreshStatsAsync(CancellationToken cancellationToken)
+    {
+        if (updateTimer == null)
+        {
+            return;
+        }
+
+        try
+        {
+            while (await updateTimer.WaitForNextTickAsync(cancellationToken))
+            {
+                await InvokeAsync(() =>
+                {
+                    UpdateStats();
+                    StateHasChanged();
+                });
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private string FormatDuration(TimeSpan duration)
+    {
+        if (duration.TotalMinutes < 1)
+            return $"{(int)duration.TotalSeconds} seconds";
+        if (duration.TotalHours < 1)
+            return $"{(int)duration.TotalMinutes} minutes, {duration.Seconds} seconds";
+        return $"{(int)duration.TotalHours} hours, {duration.Minutes} minutes";
+    }
+
+    private void AddPreference()
+    {
+        if (!string.IsNullOrWhiteSpace(newPrefKey) && !string.IsNullOrWhiteSpace(newPrefValue))
+        {
+            SessionService.SetPreference(newPrefKey, newPrefValue);
+            newPrefKey = string.Empty;
+            newPrefValue = string.Empty;
+        }
+    }
+
+    private void RemovePreference(string key)
+    {
+        SessionService.ClearPreference(key);
+    }
+
+    private async Task SaveSession()
+    {
+        await SessionService.SaveSessionAsync(StorageService.SetInLocalStorageAsync);
+    }
+
+    private void ResetSession()
+    {
+        SessionService.ResetSession();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        SessionService.OnSessionChanged -= HandleSessionChanged;
+        updateCancellation?.Cancel();
+        updateTimer?.Dispose();
+
+        if (updateTask != null)
+        {
+            try
+            {
+                await updateTask;
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }
+
+        updateCancellation?.Dispose();
+    }
+}

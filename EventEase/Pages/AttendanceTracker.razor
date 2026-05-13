@@ -1,0 +1,333 @@
+@page "/attendance"
+@page "/attendance/{eventId:int}"
+@using EventEase.Models
+@using EventEase.Services
+@using EventEase.Components
+@inject IAttendanceService AttendanceService
+@inject IEventService EventService
+@inject NavigationManager Navigation
+
+<PageTitle>Attendance Tracker - EventEase</PageTitle>
+
+<div class="attendance-tracker-page">
+    <div class="page-header">
+        <h1><i class="bi bi-clipboard-check"></i> Attendance Tracker</h1>
+        <p class="lead">Monitor and manage event attendance</p>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Select Event</h5>
+                    <select class="form-select" @onchange="OnEventSelected">
+                        <option value="">-- Choose an event --</option>
+                        @foreach (var evt in events)
+                        {
+                            <option value="@evt.Id" selected="@(evt.Id == selectedEventId)">
+                                @evt.Name - @evt.Date.ToString("MMM dd, yyyy")
+                            </option>
+                        }
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        @if (selectedEventId.HasValue)
+        {
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">Quick Actions</h5>
+                        <div class="d-flex gap-2 flex-wrap">
+                            <button class="btn btn-primary btn-sm" @onclick="ShowAddAttendeeModal">
+                                <i class="bi bi-person-plus"></i> Add Attendee
+                            </button>
+                            <button class="btn btn-success btn-sm" @onclick="RefreshData">
+                                <i class="bi bi-arrow-clockwise"></i> Refresh
+                            </button>
+                            <button class="btn btn-info btn-sm" @onclick="() => showSearch = !showSearch">
+                                <i class="bi bi-search"></i> Search
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+
+    @if (selectedEventId.HasValue)
+    {
+        <div class="row mb-4">
+            <div class="col-12">
+                <AttendanceStats EventId="@selectedEventId.Value" 
+                                ShowExtendedStats="true" 
+                                @key="statsKey" />
+            </div>
+        </div>
+
+        @if (showSearch)
+        {
+            <div class="card mb-4">
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Search Attendees</label>
+                            <input type="text" class="form-control" 
+                                   placeholder="Search by name, email, or company" 
+                                   @bind="searchTerm"
+                                   @bind:event="oninput"
+                                   @onkeyup="OnSearchChanged" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Filter by Status</label>
+                            <select class="form-select" @onchange="OnStatusFilterChanged">
+                                <option value="">All Statuses</option>
+                                <option value="@((int)AttendanceStatus.Registered)">Registered</option>
+                                <option value="@((int)AttendanceStatus.CheckedIn)">Checked In</option>
+                                <option value="@((int)AttendanceStatus.CheckedOut)">Checked Out</option>
+                                <option value="@((int)AttendanceStatus.NoShow)">No Show</option>
+                                <option value="@((int)AttendanceStatus.Cancelled)">Cancelled</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2 d-flex align-items-end">
+                            <button class="btn btn-outline-secondary w-100" @onclick="ClearSearch">
+                                <i class="bi bi-x-circle"></i> Clear
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="bi bi-list-check"></i> 
+                    @if (filteredAttendees != null && filteredAttendees.Any())
+                    {
+                        <span>Attendee List (@filteredAttendees.Count)</span>
+                    }
+                    else
+                    {
+                        <span>Attendee List</span>
+                    }
+                </h5>
+            </div>
+            <div class="card-body p-0">
+                @if (isLoadingAttendees)
+                {
+                    <div class="text-center p-4">
+                        <div class="spinner-border" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </div>
+                }
+                else if (filteredAttendees != null && filteredAttendees.Any())
+                {
+                    <AttendanceList EventId="@selectedEventId.Value" 
+                                   ShowPhone="true"
+                                   ShowCompany="true"
+                                   ShowActions="true"
+                                   FilterByStatus="statusFilter"
+                                   Attendees="filteredAttendees"
+                                   OnAttendanceChanged="RefreshData"
+                                   @key="listKey" />
+                }
+                else
+                {
+                    <div class="p-4 text-center text-muted">
+                        <i class="bi bi-inbox" style="font-size: 3rem;"></i>
+                        <p class="mt-2">No attendees found. Add attendees to start tracking attendance.</p>
+                        <button class="btn btn-primary" @onclick="ShowAddAttendeeModal">
+                            <i class="bi bi-person-plus"></i> Add First Attendee
+                        </button>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="text-center p-5">
+            <i class="bi bi-calendar-event" style="font-size: 4rem; color: #dee2e6;"></i>
+            <h4 class="mt-3 text-muted">Select an event to view attendance</h4>
+            <p class="text-muted">Choose an event from the dropdown above to start tracking attendance.</p>
+        </div>
+    }
+</div>
+
+@if (showAddModal)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add Attendee</h5>
+                    <button type="button" class="btn-close" @onclick="CloseAddModal"></button>
+                </div>
+                <div class="modal-body">
+                    <EditForm Model="@newAttendee" OnValidSubmit="@HandleAddAttendee">
+                        <DataAnnotationsValidator />
+                        <ValidationSummary class="alert alert-danger" />
+
+                        <div class="mb-3">
+                            <label class="form-label">Full Name *</label>
+                            <InputText class="form-control" @bind-Value="newAttendee.AttendeeName" placeholder="John Doe" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Email *</label>
+                            <InputText type="email" class="form-control" @bind-Value="newAttendee.AttendeeEmail" placeholder="john@example.com" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Phone</label>
+                            <InputText class="form-control" @bind-Value="newAttendee.PhoneNumber" placeholder="(555) 123-4567" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Company</label>
+                            <InputText class="form-control" @bind-Value="newAttendee.Company" placeholder="Company Name" />
+                        </div>
+
+                        <div class="modal-footer px-0 pb-0">
+                            <button type="button" class="btn btn-secondary" @onclick="CloseAddModal">Cancel</button>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-person-plus"></i> Add Attendee
+                            </button>
+                        </div>
+                    </EditForm>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public int? EventId { get; set; }
+
+    private List<Event> events = new();
+    private int? selectedEventId;
+    private List<AttendanceRecord>? filteredAttendees;
+    private bool isLoadingAttendees = false;
+    private bool showAddModal = false;
+    private bool showSearch = false;
+    private AttendanceRecord newAttendee = new();
+    private string searchTerm = string.Empty;
+    private AttendanceStatus? statusFilter;
+    private string statsKey = Guid.NewGuid().ToString();
+    private string listKey = Guid.NewGuid().ToString();
+
+    protected override async Task OnInitializedAsync()
+    {
+        events = await EventService.GetAllEventsAsync();
+
+        if (EventId.HasValue)
+        {
+            selectedEventId = EventId.Value;
+            await LoadAttendees();
+        }
+    }
+
+    private async Task OnEventSelected(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int eventId))
+        {
+            selectedEventId = eventId;
+            searchTerm = string.Empty;
+            statusFilter = null;
+            await LoadAttendees();
+            Navigation.NavigateTo($"/attendance/{eventId}");
+        }
+        else
+        {
+            selectedEventId = null;
+            filteredAttendees = null;
+        }
+    }
+
+    private async Task LoadAttendees()
+    {
+        if (!selectedEventId.HasValue) return;
+
+        isLoadingAttendees = true;
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                filteredAttendees = await AttendanceService.SearchAttendeesAsync(selectedEventId.Value, searchTerm);
+            }
+            else if (statusFilter.HasValue)
+            {
+                filteredAttendees = await AttendanceService.GetAttendeesByStatusAsync(selectedEventId.Value, statusFilter.Value);
+            }
+            else
+            {
+                filteredAttendees = await AttendanceService.GetEventAttendeesAsync(selectedEventId.Value);
+            }
+        }
+        finally
+        {
+            isLoadingAttendees = false;
+        }
+    }
+
+    private async Task OnSearchChanged()
+    {
+        await LoadAttendees();
+    }
+
+    private async Task OnStatusFilterChanged(ChangeEventArgs e)
+    {
+        if (string.IsNullOrEmpty(e.Value?.ToString()))
+        {
+            statusFilter = null;
+        }
+        else if (Enum.TryParse<AttendanceStatus>(e.Value.ToString(), out var status))
+        {
+            statusFilter = status;
+        }
+        await LoadAttendees();
+        listKey = Guid.NewGuid().ToString();
+    }
+
+    private async Task ClearSearch()
+    {
+        searchTerm = string.Empty;
+        statusFilter = null;
+        await LoadAttendees();
+        listKey = Guid.NewGuid().ToString();
+    }
+
+    private async Task RefreshData()
+    {
+        await LoadAttendees();
+        statsKey = Guid.NewGuid().ToString();
+        listKey = Guid.NewGuid().ToString();
+    }
+
+    private void ShowAddAttendeeModal()
+    {
+        newAttendee = new AttendanceRecord { EventId = selectedEventId ?? 0 };
+        showAddModal = true;
+    }
+
+    private void CloseAddModal()
+    {
+        showAddModal = false;
+        newAttendee = new AttendanceRecord();
+    }
+
+    private async Task HandleAddAttendee()
+    {
+        if (!selectedEventId.HasValue) return;
+
+        newAttendee.EventId = selectedEventId.Value;
+        await AttendanceService.AddAttendeeAsync(newAttendee);
+
+        CloseAddModal();
+        await RefreshData();
+    }
+}

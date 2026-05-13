@@ -1,0 +1,287 @@
+@using EventEase.Models
+@using EventEase.Services
+@inject IAttendanceService AttendanceService
+
+<div class="attendance-list">
+    @if (isLoading)
+    {
+        <div class="text-center p-4">
+            <div class="spinner-border" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+    }
+    else if (attendees.Any())
+    {
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Email</th>
+                        @if (ShowPhone)
+                        {
+                            <th>Phone</th>
+                        }
+                        @if (ShowCompany)
+                        {
+                            <th>Company</th>
+                        }
+                        <th>Status</th>
+                        <th>Check-in Time</th>
+                        @if (ShowActions)
+                        {
+                            <th>Actions</th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var attendee in attendees)
+                    {
+                        <tr class="@GetRowClass(attendee)">
+                            <td>
+                                <strong>@attendee.AttendeeName</strong>
+                            </td>
+                            <td>
+                                <small class="text-muted">@attendee.AttendeeEmail</small>
+                            </td>
+                            @if (ShowPhone)
+                            {
+                                <td>
+                                    <small>@(attendee.PhoneNumber ?? "-")</small>
+                                </td>
+                            }
+                            @if (ShowCompany)
+                            {
+                                <td>
+                                    <small>@(attendee.Company ?? "-")</small>
+                                </td>
+                            }
+                            <td>
+                                <span class="badge @GetStatusBadgeClass(attendee.Status)">
+                                    @attendee.Status
+                                </span>
+                            </td>
+                            <td>
+                                @if (attendee.CheckInTime.HasValue)
+                                {
+                                    <small>@attendee.CheckInTime.Value.ToLocalTime().ToString("h:mm tt")</small>
+                                    @if (attendee.CheckOutTime.HasValue)
+                                    {
+                                        <br/>
+                                        <small class="text-muted">Out: @attendee.CheckOutTime.Value.ToLocalTime().ToString("h:mm tt")</small>
+                                    }
+                                }
+                                else
+                                {
+                                    <small class="text-muted">-</small>
+                                }
+                            </td>
+                            @if (ShowActions)
+                            {
+                                <td>
+                                    <div class="btn-group btn-group-sm">
+                                        @if (!attendee.IsCheckedIn && attendee.Status != AttendanceStatus.Cancelled)
+                                        {
+                                            <button class="btn btn-success btn-sm" 
+                                                    @onclick="() => CheckIn(attendee.Id)"
+                                                    title="Check In">
+                                                <i class="bi bi-check-circle"></i>
+                                            </button>
+                                        }
+                                        @if (attendee.IsCheckedIn && attendee.Status != AttendanceStatus.CheckedOut)
+                                        {
+                                            <button class="btn btn-info btn-sm" 
+                                                    @onclick="() => CheckOut(attendee.Id)"
+                                                    title="Check Out">
+                                                <i class="bi bi-box-arrow-right"></i>
+                                            </button>
+                                        }
+                                        @if (attendee.Status == AttendanceStatus.Registered)
+                                        {
+                                            <button class="btn btn-warning btn-sm" 
+                                                    @onclick="() => MarkNoShow(attendee.Id)"
+                                                    title="Mark as No Show">
+                                                <i class="bi bi-x-circle"></i>
+                                            </button>
+                                        }
+                                    </div>
+                                </td>
+                            }
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        @if (ShowPagination && totalPages > 1)
+        {
+            <div class="d-flex justify-content-between align-items-center mt-3">
+                <div class="text-muted">
+                    Showing @((currentPage - 1) * pageSize + 1) to @Math.Min(currentPage * pageSize, totalCount) of @totalCount attendees
+                </div>
+                <nav>
+                    <ul class="pagination pagination-sm mb-0">
+                        <li class="page-item @(currentPage == 1 ? "disabled" : "")">
+                            <button class="page-link" @onclick="() => ChangePage(currentPage - 1)">Previous</button>
+                        </li>
+                        @for (int i = 1; i <= totalPages; i++)
+                        {
+                            var pageNum = i;
+                            <li class="page-item @(currentPage == pageNum ? "active" : "")">
+                                <button class="page-link" @onclick="() => ChangePage(pageNum)">@pageNum</button>
+                            </li>
+                        }
+                        <li class="page-item @(currentPage == totalPages ? "disabled" : "")">
+                            <button class="page-link" @onclick="() => ChangePage(currentPage + 1)">Next</button>
+                        </li>
+                    </ul>
+                </nav>
+            </div>
+        }
+    }
+    else
+    {
+        <div class="alert alert-info">
+            <i class="bi bi-info-circle"></i> No attendees found for this event.
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public int EventId { get; set; }
+
+    [Parameter]
+    public bool ShowPhone { get; set; } = false;
+
+    [Parameter]
+    public bool ShowCompany { get; set; } = false;
+
+    [Parameter]
+    public bool ShowActions { get; set; } = true;
+
+    [Parameter]
+    public bool ShowPagination { get; set; } = false;
+
+    [Parameter]
+    public AttendanceStatus? FilterByStatus { get; set; }
+
+    [Parameter]
+    public IReadOnlyList<AttendanceRecord>? Attendees { get; set; }
+
+    [Parameter]
+    public EventCallback OnAttendanceChanged { get; set; }
+
+    private List<AttendanceRecord> attendees = new();
+    private bool isLoading = true;
+    private int currentPage = 1;
+    private int pageSize = 10;
+    private int totalCount = 0;
+    private int totalPages = 0;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadAttendeesAsync();
+    }
+
+    private async Task LoadAttendeesAsync()
+    {
+        isLoading = true;
+        try
+        {
+            if (Attendees != null)
+            {
+                attendees = Attendees.ToList();
+            }
+            else if (FilterByStatus.HasValue)
+            {
+                attendees = await AttendanceService.GetAttendeesByStatusAsync(EventId, FilterByStatus.Value);
+            }
+            else
+            {
+                attendees = await AttendanceService.GetEventAttendeesAsync(EventId);
+            }
+
+            ApplyPagination();
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void ApplyPagination()
+    {
+        totalCount = attendees.Count;
+        totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
+
+        if (currentPage > totalPages)
+        {
+            currentPage = Math.Max(totalPages, 1);
+        }
+
+        if (ShowPagination)
+        {
+            attendees = attendees
+                .Skip((currentPage - 1) * pageSize)
+                .Take(pageSize)
+                .ToList();
+        }
+    }
+
+    private async Task CheckIn(int attendeeId)
+    {
+        await AttendanceService.CheckInAttendeeAsync(attendeeId);
+        await LoadAttendeesAsync();
+        await OnAttendanceChanged.InvokeAsync();
+    }
+
+    private async Task CheckOut(int attendeeId)
+    {
+        await AttendanceService.CheckOutAttendeeAsync(attendeeId);
+        await LoadAttendeesAsync();
+        await OnAttendanceChanged.InvokeAsync();
+    }
+
+    private async Task MarkNoShow(int attendeeId)
+    {
+        await AttendanceService.MarkAsNoShowAsync(attendeeId);
+        await LoadAttendeesAsync();
+        await OnAttendanceChanged.InvokeAsync();
+    }
+
+    private void ChangePage(int page)
+    {
+        if (page >= 1 && page <= totalPages)
+        {
+            currentPage = page;
+            _ = LoadAttendeesAsync();
+        }
+    }
+
+    private string GetRowClass(AttendanceRecord attendee)
+    {
+        return attendee.Status switch
+        {
+            AttendanceStatus.CheckedIn => "table-success",
+            AttendanceStatus.CheckedOut => "table-info",
+            AttendanceStatus.NoShow => "table-danger",
+            AttendanceStatus.Cancelled => "table-secondary",
+            _ => ""
+        };
+    }
+
+    private string GetStatusBadgeClass(AttendanceStatus status)
+    {
+        return status switch
+        {
+            AttendanceStatus.Registered => "bg-primary",
+            AttendanceStatus.CheckedIn => "bg-success",
+            AttendanceStatus.CheckedOut => "bg-info",
+            AttendanceStatus.NoShow => "bg-danger",
+            AttendanceStatus.Cancelled => "bg-secondary",
+            _ => "bg-light text-dark"
+        };
+    }
+}

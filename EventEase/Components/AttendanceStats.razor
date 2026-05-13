@@ -1,0 +1,210 @@
+@using EventEase.Services
+@inject IAttendanceService AttendanceService
+@implements IAsyncDisposable
+
+<div class="attendance-stats">
+    @if (isLoading)
+    {
+        <div class="text-center p-3">
+            <div class="spinner-border spinner-border-sm" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+    }
+    else if (stats != null)
+    {
+        <div class="stats-grid">
+            <div class="stat-card stat-registered">
+                <div class="stat-icon">
+                    <i class="bi bi-people-fill"></i>
+                </div>
+                <div class="stat-content">
+                    <div class="stat-value">@stats.TotalRegistered</div>
+                    <div class="stat-label">Registered</div>
+                </div>
+            </div>
+
+            <div class="stat-card stat-checked-in">
+                <div class="stat-icon">
+                    <i class="bi bi-check-circle-fill"></i>
+                </div>
+                <div class="stat-content">
+                    <div class="stat-value">@stats.CheckedIn</div>
+                    <div class="stat-label">Checked In</div>
+                </div>
+            </div>
+
+            <div class="stat-card stat-checked-out">
+                <div class="stat-icon">
+                    <i class="bi bi-box-arrow-right"></i>
+                </div>
+                <div class="stat-content">
+                    <div class="stat-value">@stats.CheckedOut</div>
+                    <div class="stat-label">Checked Out</div>
+                </div>
+            </div>
+
+            <div class="stat-card stat-rate">
+                <div class="stat-icon">
+                    <i class="bi bi-graph-up-arrow"></i>
+                </div>
+                <div class="stat-content">
+                    <div class="stat-value">@stats.AttendanceRate.ToString("F1")%</div>
+                    <div class="stat-label">Attendance Rate</div>
+                </div>
+            </div>
+
+            @if (ShowExtendedStats)
+            {
+                <div class="stat-card stat-no-show">
+                    <div class="stat-icon">
+                        <i class="bi bi-x-circle-fill"></i>
+                    </div>
+                    <div class="stat-content">
+                        <div class="stat-value">@stats.NoShows</div>
+                        <div class="stat-label">No Shows</div>
+                    </div>
+                </div>
+
+                <div class="stat-card stat-cancelled">
+                    <div class="stat-icon">
+                        <i class="bi bi-slash-circle"></i>
+                    </div>
+                    <div class="stat-content">
+                        <div class="stat-value">@stats.Cancelled</div>
+                        <div class="stat-label">Cancelled</div>
+                    </div>
+                </div>
+
+                @if (stats.AverageStayDuration.HasValue)
+                {
+                    <div class="stat-card stat-duration">
+                        <div class="stat-icon">
+                            <i class="bi bi-clock-fill"></i>
+                        </div>
+                        <div class="stat-content">
+                            <div class="stat-value">@FormatDuration(stats.AverageStayDuration.Value)</div>
+                            <div class="stat-label">Avg Stay</div>
+                        </div>
+                    </div>
+                }
+
+                @if (stats.FirstCheckIn.HasValue && stats.LastCheckIn.HasValue)
+                {
+                    <div class="stat-card stat-times">
+                        <div class="stat-icon">
+                            <i class="bi bi-calendar-check"></i>
+                        </div>
+                        <div class="stat-content">
+                            <div class="stat-value-small">
+                                First: @stats.FirstCheckIn.Value.ToLocalTime().ToString("h:mm tt")<br/>
+                                Last: @stats.LastCheckIn.Value.ToLocalTime().ToString("h:mm tt")
+                            </div>
+                            <div class="stat-label">Check-in Times</div>
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+    }
+    else
+    {
+        <div class="alert alert-info">
+            <i class="bi bi-info-circle"></i> No attendance data available for this event.
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public int EventId { get; set; }
+
+    [Parameter]
+    public bool ShowExtendedStats { get; set; } = false;
+
+    [Parameter]
+    public bool AutoRefresh { get; set; } = false;
+
+    private AttendanceStatistics? stats;
+    private bool isLoading = true;
+    private PeriodicTimer? refreshTimer;
+    private CancellationTokenSource? refreshCancellation;
+    private Task? refreshTask;
+
+    protected override void OnInitialized()
+    {
+        if (AutoRefresh)
+        {
+            refreshCancellation = new CancellationTokenSource();
+            refreshTimer = new PeriodicTimer(TimeSpan.FromSeconds(10));
+            refreshTask = RefreshStatsAsync(refreshCancellation.Token);
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadStatsAsync();
+    }
+
+    private async Task LoadStatsAsync()
+    {
+        isLoading = true;
+        try
+        {
+            stats = await AttendanceService.GetEventStatisticsAsync(EventId);
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task RefreshStatsAsync(CancellationToken cancellationToken)
+    {
+        if (refreshTimer == null)
+        {
+            return;
+        }
+
+        try
+        {
+            while (await refreshTimer.WaitForNextTickAsync(cancellationToken))
+            {
+                await InvokeAsync(async () =>
+                {
+                    await LoadStatsAsync();
+                    StateHasChanged();
+                });
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private string FormatDuration(TimeSpan duration)
+    {
+        if (duration.TotalHours >= 1)
+            return $"{(int)duration.TotalHours}h {duration.Minutes}m";
+        return $"{duration.Minutes}m";
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        refreshCancellation?.Cancel();
+        refreshTimer?.Dispose();
+
+        if (refreshTask != null)
+        {
+            try
+            {
+                await refreshTask;
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }
+
+        refreshCancellation?.Dispose();
+    }
+}

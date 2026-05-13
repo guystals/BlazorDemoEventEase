@@ -1,0 +1,232 @@
+@page "/events/{id:int}/edit"
+@using EventEase.Models
+@using EventEase.Services
+@inject IEventService EventService
+@inject NavigationManager Navigation
+@inject ILogger<EditEvent> Logger
+
+<PageTitle>Edit Event - EventEase</PageTitle>
+
+<div class="edit-event-page">
+    @if (isLoading)
+    {
+        <div class="text-center">
+            <div class="spinner-border" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+    }
+    else if (eventForm == null)
+    {
+        <div class="alert alert-warning">
+            <h4>Event Not Found</h4>
+            <p>The event you're trying to edit doesn't exist.</p>
+            <a href="/events" class="btn btn-primary">Back to Events</a>
+        </div>
+    }
+    else
+    {
+        <div class="page-header">
+            <h1>Edit Event</h1>
+            <p class="lead">Update event information</p>
+        </div>
+
+        <div class="row">
+            <div class="col-lg-8 mx-auto">
+                <div class="card">
+                    <div class="card-body">
+                        <EditForm Model="@eventForm" OnValidSubmit="@HandleSubmit">
+                            <DataAnnotationsValidator />
+                            <ValidationSummary class="alert alert-danger" />
+
+                            <div class="mb-3">
+                                <label for="eventName" class="form-label">Event Name *</label>
+                                <InputText id="eventName" class="form-control" @bind-Value="eventForm.Name" placeholder="Enter event name" />
+                                <ValidationMessage For="@(() => eventForm.Name)" />
+                            </div>
+
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="eventDate" class="form-label">Event Date *</label>
+                                    <InputDate id="eventDate" class="form-control" @bind-Value="eventForm.Date" />
+                                    <ValidationMessage For="@(() => eventForm.Date)" />
+                                </div>
+
+                                <div class="col-md-6 mb-3">
+                                    <label for="eventCategory" class="form-label">Category *</label>
+                                    <InputSelect id="eventCategory" class="form-select" @bind-Value="eventForm.Category">
+                                        <option value="">-- Select Category --</option>
+                                        <option value="Technology">Technology</option>
+                                        <option value="Business">Business</option>
+                                        <option value="Social">Social</option>
+                                        <option value="Corporate">Corporate</option>
+                                        <option value="Education">Education</option>
+                                        <option value="Networking">Networking</option>
+                                    </InputSelect>
+                                    <ValidationMessage For="@(() => eventForm.Category)" />
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="eventLocation" class="form-label">Location *</label>
+                                <InputText id="eventLocation" class="form-control" @bind-Value="eventForm.Location" placeholder="Enter event location" />
+                                <ValidationMessage For="@(() => eventForm.Location)" />
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="eventCapacity" class="form-label">Capacity *</label>
+                                <InputNumber id="eventCapacity" class="form-control" @bind-Value="eventForm.Capacity" placeholder="Maximum attendees" />
+                                <ValidationMessage For="@(() => eventForm.Capacity)" />
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="eventDescription" class="form-label">Description *</label>
+                                <InputTextArea id="eventDescription" class="form-control" rows="5" @bind-Value="eventForm.Description" placeholder="Enter event description" />
+                                <ValidationMessage For="@(() => eventForm.Description)" />
+                                <div class="form-text">
+                                    @eventForm.Description.Length / 1000 characters
+                                </div>
+                            </div>
+
+                            <div class="d-flex gap-2 mt-4">
+                                <button type="submit" class="btn btn-primary" disabled="@isSubmitting">
+                                    @if (isSubmitting)
+                                    {
+                                        <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                                    }
+                                    <i class="bi bi-save"></i> Save Changes
+                                </button>
+                                <a href="@($"/events/{Id}")" class="btn btn-outline-secondary">
+                                    <i class="bi bi-x-circle"></i> Cancel
+                                </a>
+                                <button type="button" class="btn btn-danger ms-auto" @onclick="ShowDeleteConfirmation">
+                                    <i class="bi bi-trash"></i> Delete Event
+                                </button>
+                            </div>
+                        </EditForm>
+                    </div>
+                </div>
+
+                @if (showSuccessMessage)
+                {
+                    <div class="alert alert-success mt-3">
+                        <h5><i class="bi bi-check-circle-fill"></i> Success!</h5>
+                        <p>Event "<strong>@eventForm.Name</strong>" has been updated successfully.</p>
+                    </div>
+                }
+
+                @if (showDeleteConfirmation)
+                {
+                    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+                        <div class="modal-dialog modal-dialog-centered">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">Confirm Delete</h5>
+                                    <button type="button" class="btn-close" @onclick="CancelDelete"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <p>Are you sure you want to delete the event "<strong>@eventForm.Name</strong>"?</p>
+                                    <p class="text-danger">This action cannot be undone.</p>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" @onclick="CancelDelete">Cancel</button>
+                                    <button type="button" class="btn btn-danger" @onclick="ConfirmDelete" disabled="@isDeleting">
+                                        @if (isDeleting)
+                                        {
+                                            <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                                        }
+                                        Delete Event
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public int Id { get; set; }
+
+    private EventFormModel? eventForm;
+    private bool isLoading = true;
+    private bool isSubmitting = false;
+    private bool showSuccessMessage = false;
+    private bool showDeleteConfirmation = false;
+    private bool isDeleting = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var existingEvent = await EventService.GetEventByIdAsync(Id);
+        if (existingEvent != null)
+        {
+            eventForm = EventFormModel.FromEvent(existingEvent);
+        }
+        isLoading = false;
+    }
+
+    private async Task HandleSubmit()
+    {
+        if (eventForm == null) return;
+
+        isSubmitting = true;
+        showSuccessMessage = false;
+
+        try
+        {
+            var updatedEvent = eventForm.ToEvent();
+            var success = await EventService.UpdateEventAsync(updatedEvent);
+
+            if (success)
+            {
+                showSuccessMessage = true;
+                Navigation.NavigateTo($"/events/{Id}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to update event {EventId}.", Id);
+            showSuccessMessage = false;
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+    private void ShowDeleteConfirmation()
+    {
+        showDeleteConfirmation = true;
+    }
+
+    private void CancelDelete()
+    {
+        showDeleteConfirmation = false;
+    }
+
+    private async Task ConfirmDelete()
+    {
+        isDeleting = true;
+
+        try
+        {
+            var success = await EventService.DeleteEventAsync(Id);
+            if (success)
+            {
+                Navigation.NavigateTo("/events");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to delete event {EventId}.", Id);
+        }
+        finally
+        {
+            isDeleting = false;
+            showDeleteConfirmation = false;
+        }
+    }
+}

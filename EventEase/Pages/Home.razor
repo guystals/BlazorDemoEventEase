@@ -1,0 +1,95 @@
+﻿@page "/"
+
+<PageTitle>Home - EventEase</PageTitle>
+
+<div class="home-page">
+    <section class="home-command">
+        <div class="home-command-copy">
+            <span class="home-kicker">EventEase workspace</span>
+            <h1>Plan the room before people arrive.</h1>
+            <p>
+                Keep event listings, registration flow, and attendance follow-up in one tidy place
+                so hosts can move from idea to check-in without chasing spreadsheets.
+            </p>
+
+            <div class="home-actions" aria-label="Primary actions">
+                <a href="/events" class="btn btn-dark btn-lg">
+                    <i class="bi bi-calendar-week"></i>
+                    View schedule
+                </a>
+                <a href="/events/add" class="btn btn-outline-dark btn-lg">
+                    <i class="bi bi-plus-lg"></i>
+                    Create event
+                </a>
+            </div>
+        </div>
+
+        <div class="home-brief" aria-label="Today at a glance">
+            <div class="brief-header">
+                <span>Next up</span>
+                <strong>Operations board</strong>
+            </div>
+            <div class="brief-item is-active">
+                <span class="brief-time">09:00</span>
+                <div>
+                    <strong>Tech Summit doors open</strong>
+                    <small>500 seats · San Francisco</small>
+                </div>
+            </div>
+            <div class="brief-item">
+                <span class="brief-time">10:00</span>
+                <div>
+                    <strong>Leadership workshop</strong>
+                    <small>Check room capacity and registration list</small>
+                </div>
+            </div>
+            <div class="brief-item">
+                <span class="brief-time">18:00</span>
+                <div>
+                    <strong>Networking gala prep</strong>
+                    <small>Review venue notes before arrivals</small>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="home-pathways" aria-label="Common event workflows">
+        <a class="pathway pathway-wide" href="/events">
+            <span class="pathway-icon"><i class="bi bi-search"></i></span>
+            <div>
+                <span class="pathway-label">Find the right event</span>
+                <strong>Search by topic, city, or timing.</strong>
+                <p>Use the event list when someone asks what is available, what is full, or what needs attention next.</p>
+            </div>
+        </a>
+
+        <a class="pathway" href="/events/add">
+            <span class="pathway-icon"><i class="bi bi-clipboard-plus"></i></span>
+            <div>
+                <span class="pathway-label">Build a listing</span>
+                <strong>Capture the details that matter.</strong>
+                <p>Name, venue, date, capacity, category, and a clear reason to attend.</p>
+            </div>
+        </a>
+
+        <a class="pathway" href="/attendance">
+            <span class="pathway-icon"><i class="bi bi-person-check"></i></span>
+            <div>
+                <span class="pathway-label">Run the room</span>
+                <strong>Track who actually shows.</strong>
+                <p>Keep registration and attendance close together once the event is live.</p>
+            </div>
+        </a>
+    </section>
+
+    <div class="home-footer-cta">
+        <div>
+            <span class="home-kicker">Start with the schedule</span>
+            <strong>See what is already planned, then add the missing piece.</strong>
+        </div>
+        <a href="/events" class="btn btn-primary">
+            Open events
+            <i class="bi bi-arrow-right"></i>
+        </a>
+    </div>
+</div>
