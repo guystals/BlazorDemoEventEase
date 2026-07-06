@@ -1,7 +1,7 @@
 # EventEase
 
 A modern event management system built with Blazor WebAssembly and .NET 10.
-
+---------------------------------------------------------------------------
 ## Features
 
 ### Event Management
